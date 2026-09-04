@@ -7,8 +7,6 @@ const { promisify } = require("util");
 
 const execFileAsync = promisify(execFile);
 
-const TESSERACT_PATH =
-    "C:\\Users\\rian2\\OneDrive\\Desktop\\Adrian\\Code_tools\\tesseract.exe";
 
 const PDFTOPPM_PATH =
     "C:\\Users\\rian2\\OneDrive\\Desktop\\Adrian\\Code_tools\\poppler\\poppler-26.02.0\\Library\\bin\\pdftoppm.exe";
