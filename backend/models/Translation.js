@@ -41,4 +41,8 @@ const translationSchema = new mongoose.Schema(
     }
 );
 
+
+translationSchema.index({ documentId: 1 });
+translationSchema.index({ userId: 1 });
+
 module.exports = mongoose.model("Translation", translationSchema);

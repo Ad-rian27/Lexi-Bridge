@@ -45,4 +45,7 @@ const documentSchema = new mongoose.Schema(
     }
 );
 
+
+documentSchema.index({ userId: 1 });
+
 module.exports = mongoose.model("Document", documentSchema);
