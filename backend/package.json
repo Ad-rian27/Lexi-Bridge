@@ -19,6 +19,7 @@
     "mongoose": "^9.9.4",
     "multer": "^2.3.0",
     "node-tesseract-ocr": "^2.2.1",
-    "pdf-parse": "^2.4.5"
+    "pdf-parse": "^2.4.5",
+    "sarvamai": "^1.1.10"
   }
 }
