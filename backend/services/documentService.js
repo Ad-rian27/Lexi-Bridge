@@ -69,7 +69,7 @@ async function extractTextFromPDF(filePath) {
 
         extractedText += text + "\n";
 
-        fs.unlinkSync(imagePath);
+       // fs.unlinkSync(imagePath);
     }
 
     return {
