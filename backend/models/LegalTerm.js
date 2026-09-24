@@ -9,6 +9,23 @@ const legalTermSchema = new mongoose.Schema(
             trim: true
         },
 
+        translations: {
+            malayalam: {
+                type: String,
+                required: true
+            },
+
+            hindi: {
+                type: String,
+                required: true
+            },
+
+            tamil: {
+                type: String,
+                required: true
+            }
+        },
+
         definitions: {
             english: {
                 type: String,
