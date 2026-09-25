@@ -56,4 +56,23 @@ router.post(
   },
 );
 
+router.get("/", authMiddleware, async (req, res) => {
+    try {
+        const documents = await Document.find({
+            userId: req.user.userId
+        }).sort({ createdAt: -1 });
+
+        res.status(200).json({
+            documents
+        });
+    } catch (error) {
+        console.error("Failed to fetch documents:", error);
+
+        res.status(500).json({
+            message: "Failed to fetch documents",
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;

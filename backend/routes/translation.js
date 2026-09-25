@@ -3,6 +3,10 @@ const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
 const Translation = require("../models/Translation");
 const { translateLongText } = require("../services/translationService");
+const {
+  detectLegalTerms,
+  detectTranslatedLegalTerms,
+} = require("../services/legalTermService");
 
 const router = express.Router();
 
@@ -66,6 +70,11 @@ router.post("/translate", authMiddleware, async (req, res) => {
         targetLanguage,
       );
 
+      const legalTerms = await detectTranslatedLegalTerms(
+        translatedText,
+        targetLanguage,
+      );
+
       translation.translatedText = translatedText;
       translation.status = "completed";
 
@@ -79,6 +88,7 @@ router.post("/translate", authMiddleware, async (req, res) => {
           targetLanguage: translation.targetLanguage,
           status: translation.status,
           translatedText: translation.translatedText,
+          legalTerms,
         },
       });
     } catch (translationError) {
