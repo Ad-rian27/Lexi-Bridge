@@ -1,8 +1,12 @@
 const express = require("express");
 const multer = require("multer");
+const fs = require("fs");
+const path = require("path");
+const mongoose = require("mongoose");
 const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
 const { extractTextFromPDF } = require("../services/documentService");
+
 
 const router = express.Router();
 
@@ -31,6 +35,7 @@ router.post(
         filePath: req.file.path,
         extractionMethod: result.method,
         extractedText: result.text,
+        extractedPages: result.pages || [],
         processingStatus: "completed",
       });
 
@@ -73,6 +78,51 @@ router.get("/", authMiddleware, async (req, res) => {
             error: error.message
         });
     }
+});
+
+router.get("/:id/file", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        message: "Invalid document ID",
+      });
+    }
+
+    const document = await Document.findOne({
+      _id: id,
+      userId: req.user.userId,
+    });
+
+    if (!document) {
+      return res.status(404).json({
+        message: "Document not found",
+      });
+    }
+
+    const filePath = path.resolve(document.filePath);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        message: "Original PDF file not found",
+      });
+    }
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="${encodeURIComponent(document.originalFilename)}"`
+    );
+
+    return res.sendFile(filePath);
+  } catch (error) {
+    console.error("Failed to retrieve PDF:", error);
+
+    return res.status(500).json({
+      message: "Failed to retrieve PDF",
+    });
+  }
 });
 
 module.exports = router;
