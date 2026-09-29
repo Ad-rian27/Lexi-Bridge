@@ -1,13 +1,50 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PdfPreview from "../components/PdfPreview";
 import { getDocumentPdf } from "../services/documentService";
 
 function TranslationViewer() {
-  const [selectedTermKey, setSelectedTermKey] = useState(null);
+  const [activeTermKey, setActiveTermKey] = useState(null);
   const [showAllHighlights, setShowAllHighlights] = useState(false);
   const [pdfUrl, setPdfUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfError, setPdfError] = useState("");
+  const [popupPosition, setPopupPosition] = useState({
+    top: 0,
+    left: 0,
+  });
+
+  const popupRef = useRef(null);
+  const showTermPopup = (termKey, event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+
+    const popupWidth = 320;
+    const gap = 10;
+    const margin = 12;
+
+    // Prefer the right side of the highlighted word.
+    let left = rect.right + gap;
+
+    // If there is not enough room, place it on the left.
+    if (left + popupWidth > window.innerWidth - margin) {
+      left = rect.left - popupWidth - gap;
+    }
+
+    // Keep the popup inside the horizontal viewport.
+    left = Math.max(
+      margin,
+      Math.min(left, window.innerWidth - popupWidth - margin),
+    );
+
+    // Align it with the highlighted word.
+    let top = rect.top;
+
+    // Keep it inside the vertical viewport.
+    const maxTop = window.innerHeight - 300 - margin;
+    top = Math.max(margin, Math.min(top, maxTop));
+
+    setPopupPosition({ top, left });
+    setActiveTermKey(termKey);
+  };
 
   const savedResult = sessionStorage.getItem("translationResult");
 
@@ -107,16 +144,9 @@ function TranslationViewer() {
   let activeOccurrences = [];
 
   if (result.highlightTerms !== false) {
-    if (selectedTermKey) {
-      const selectedGroup = groupedTerms.get(selectedTermKey);
-
-      activeOccurrences = selectedGroup ? selectedGroup.occurrences : [];
-    } else if (showAllHighlights) {
-      activeOccurrences = termGroups.flatMap((group) => group.occurrences);
-    } else {
-      // Default: only the first occurrence of each unique term.
-      activeOccurrences = termGroups.map((group) => group.occurrences[0]);
-    }
+    activeOccurrences = showAllHighlights
+      ? termGroups.flatMap((group) => group.occurrences)
+      : termGroups.map((group) => group.occurrences[0]);
   }
 
   // Sort by character position before rendering.
@@ -148,11 +178,19 @@ function TranslationViewer() {
       elements.push(
         <mark
           key={`term-${index}`}
-          className="legal-highlight"
-          onClick={() => {
-            setSelectedTermKey(selectedTermKey === termKey ? null : termKey);
+          className={`legal-highlight ${
+            activeTermKey === termKey ? "active" : ""
+          }`}
+          onMouseEnter={(event) => showTermPopup(termKey, event)}
+          onMouseLeave={() => setActiveTermKey(null)}
+          onClick={(event) => {
+            if (activeTermKey === termKey) {
+              setActiveTermKey(null);
+            } else {
+              showTermPopup(termKey, event);
+            }
           }}
-          title={`Click to explore ${term.term}`}
+          title={`Explore ${term.term}`}
         >
           {translatedText.slice(term.start, term.end)}
         </mark>,
@@ -172,9 +210,7 @@ function TranslationViewer() {
     return elements;
   };
 
-  const selectedGroup = selectedTermKey
-    ? groupedTerms.get(selectedTermKey)
-    : null;
+  const activeGroup = activeTermKey ? groupedTerms.get(activeTermKey) : null;
 
   return (
     <div className="translation-viewer">
@@ -225,89 +261,59 @@ function TranslationViewer() {
           </article>
         </main>
 
-        <aside className="term-panel">
-          <h2>Legal Terminology</h2>
+        {activeGroup && (
+          <div
+            ref={popupRef}
+            className="term-popup"
+            style={{
+              top: `${popupPosition.top}px`,
+              left: `${popupPosition.left}px`,
+            }}
+            onMouseEnter={() => setActiveTermKey(activeGroup.key)}
+            onMouseLeave={() => setActiveTermKey(null)}
+          >
+            <div className="term-popup-header">
+              <span className="term-category">
+                {activeGroup.representative.category || "Legal Term"}
+              </span>
 
-          <p>{termGroups.length} unique terms detected</p>
-
-          <label className="highlight-toggle">
-            <input
-              type="checkbox"
-              checked={showAllHighlights}
-              onChange={(event) => {
-                setShowAllHighlights(event.target.checked);
-                setSelectedTermKey(null);
-              }}
-            />
-            Highlight all occurrences
-          </label>
-
-          <div className="term-list">
-            {termGroups.map((group) => (
               <button
-                key={group.key}
-                className={`term-list-item ${
-                  selectedTermKey === group.key ? "active" : ""
-                }`}
-                onClick={() => {
-                  setSelectedTermKey(
-                    selectedTermKey === group.key ? null : group.key,
-                  );
-                }}
+                className="term-popup-close"
+                onClick={() => setActiveTermKey(null)}
+                aria-label="Close terminology popup"
               >
-                <span>{group.term}</span>
-
-                <span className="occurrence-count">
-                  {group.occurrences.length}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {selectedGroup && (
-            <div className="term-details">
-              <h3>{selectedGroup.term}</h3>
-
-              <p>
-                <strong>Category</strong>
-                <br />
-                {selectedGroup.representative.category}
-              </p>
-
-              <p>
-                <strong>Translated Term</strong>
-                <br />
-                {selectedGroup.representative.translatedTerm}
-              </p>
-
-              <p>
-                <strong>Definition</strong>
-                <br />
-                {selectedGroup.representative.definitions?.[selectedLanguage]}
-              </p>
-
-              <p>
-                <strong>Simplified Meaning</strong>
-                <br />
-                {
-                  selectedGroup.representative.simplifiedMeaning?.[
-                    selectedLanguage
-                  ]
-                }
-              </p>
-
-              <p>
-                <strong>Occurrences</strong>
-                <br />
-                {selectedGroup.occurrences.length} in this document
-              </p>
-
-              <button onClick={() => setSelectedTermKey(null)}>
-                Clear Selection
+                ×
               </button>
             </div>
-          )}
-        </aside>
+
+            <h3>{activeGroup.term}</h3>
+
+            <p className="term-translated">
+              {activeGroup.representative.translatedTerm}
+            </p>
+
+            <div className="term-popup-section">
+              <strong>Definition</strong>
+              <p>
+                {activeGroup.representative.definitions?.[selectedLanguage] ||
+                  "Definition unavailable."}
+              </p>
+            </div>
+
+            <div className="term-popup-section">
+              <strong>Simple Explanation</strong>
+              <p>
+                {activeGroup.representative.simplifiedMeaning?.[
+                  selectedLanguage
+                ] || "Simplified meaning unavailable."}
+              </p>
+            </div>
+
+            <div className="term-popup-footer">
+              {activeGroup.occurrences.length} occurrence(s) in this document
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

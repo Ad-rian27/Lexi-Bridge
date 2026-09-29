@@ -749,11 +749,9 @@ a {
 
 .viewer-layout {
   display: grid;
-  grid-template-columns:
-    minmax(0, 1.05fr)
-    minmax(0, 1.05fr)
-    300px;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  position: relative;
   align-items: start;
 }
 
@@ -865,9 +863,9 @@ a {
 }
 
 .pdf-document-area canvas {
-    max-width: none !important;
-    height: auto !important;
-    display: block;
+  max-width: none !important;
+  height: auto !important;
+  display: block;
 }
 
 .pdf-page-info {
@@ -1023,4 +1021,118 @@ a {
   .original-pdf-content {
     max-height: 65vh;
   }
+}
+
+/* Legal terminology floating popup */
+
+.term-popup {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  width: 320px;
+  max-width: calc(100% - 32px);
+  padding: 22px;
+
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+
+  box-shadow:
+    0 12px 35px rgba(31, 41, 55, 0.12),
+    0 3px 10px rgba(31, 41, 55, 0.05);
+
+  z-index: 100;
+
+  animation: termFadeIn 0.2s ease-out;
+}
+
+.term-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.term-category {
+  display: inline-block;
+  padding: 5px 10px;
+  border-radius: 20px;
+  background: #f0edff;
+  color: #6952c5;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.term-popup-close {
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.term-popup h3 {
+  font-size: 19px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0 0 5px;
+}
+
+.term-translated {
+  font-size: 14px;
+  color: #7462c6;
+  font-weight: 500;
+  margin-bottom: 18px;
+}
+
+.term-popup-section {
+  margin-top: 16px;
+}
+
+.term-popup-section strong {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.term-popup-section p {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #374151;
+  margin: 0;
+}
+
+.term-popup-footer {
+  border-top: 1px solid #f0f0f0;
+  padding-top: 12px;
+  margin-top: 18px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+@keyframes termFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Active terminology highlight */
+
+.legal-highlight.active {
+  background: #c4b5fd;
+  outline: 2px solid #8b5cf6;
+  border-radius: 3px;
 }

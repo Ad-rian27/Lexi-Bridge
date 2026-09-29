@@ -2,7 +2,10 @@ const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
 const Translation = require("../models/Translation");
-const { translateLongText } = require("../services/translationService");
+const {
+  translateLongText,
+  translatePages,
+} = require("../services/translationService");
 const {
   detectLegalTerms,
   detectTranslatedLegalTerms,
@@ -64,11 +67,23 @@ router.post("/translate", authMiddleware, async (req, res) => {
     await translation.save();
 
     try {
-      // Translate the extracted document text
-      const translatedText = await translateLongText(
-        document.extractedText,
-        targetLanguage,
-      );
+      let translatedPages = [];
+      let translatedText = "";
+
+      if (document.extractedPages && document.extractedPages.length > 0) {
+        translatedPages = await translatePages(
+          document.extractedPages,
+          targetLanguage,
+        );
+
+        translatedText = translatedPages.map((page) => page.text).join("\n\n");
+      } else {
+        // Fallback for documents uploaded before page extraction was implemented
+        translatedText = await translateLongText(
+          document.extractedText,
+          targetLanguage,
+        );
+      }
 
       const legalTerms = await detectTranslatedLegalTerms(
         translatedText,
@@ -76,6 +91,7 @@ router.post("/translate", authMiddleware, async (req, res) => {
       );
 
       translation.translatedText = translatedText;
+      translation.translatedPages = translatedPages;
       translation.status = "completed";
 
       await translation.save();
@@ -88,6 +104,7 @@ router.post("/translate", authMiddleware, async (req, res) => {
           targetLanguage: translation.targetLanguage,
           status: translation.status,
           translatedText: translation.translatedText,
+          translatedPages: translation.translatedPages,
           legalTerms,
         },
       });
