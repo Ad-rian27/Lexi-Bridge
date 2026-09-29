@@ -99,7 +99,28 @@ async function translateLongText(text, targetLanguage) {
     return translatedChunks.join("\n\n");
 }
 
+async function translatePages(pages, targetLanguage) {
+    const translatedPages = [];
+
+    for (const page of pages) {
+        console.log(`Translating page ${page.pageNumber}...`);
+
+        const translatedText = await translateLongText(
+            page.text,
+            targetLanguage
+        );
+
+        translatedPages.push({
+            pageNumber: page.pageNumber,
+            text: translatedText
+        });
+    }
+
+    return translatedPages;
+}
+
 module.exports = {
     translateText,
-    translateLongText
+    translateLongText,
+    translatePages
 };

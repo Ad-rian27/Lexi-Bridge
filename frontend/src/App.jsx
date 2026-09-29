@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import UploadDocument from "./pages/UploadDocument";
 import TranslationSetup from "./pages/TranslationSetup";
 import TranslationViewer from "./pages/TranslationViewer";
+import PdfTest from "./pages/PdfTest";
 
 function App() {
   const path = window.location.pathname;
@@ -26,6 +27,10 @@ function App() {
 
   if (path === "/viewer") {
     return <TranslationViewer />;
+  }
+
+  if (path === "/pdf-test") {
+    return <PdfTest />;
   }
 
   return <Login />;

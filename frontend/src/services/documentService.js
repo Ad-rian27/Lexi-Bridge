@@ -18,3 +18,15 @@ export const getDocuments = async () => {
 
     return response.data;
 };
+
+// Retrieve original PDF using authenticated API
+export const getDocumentPdf = async (documentId) => {
+    const response = await api.get(
+        `/documents/${documentId}/file`,
+        {
+            responseType: "blob",
+        }
+    );
+
+    return response.data;
+};
