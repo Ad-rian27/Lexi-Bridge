@@ -4,3 +4,6 @@ dist/
 uploads/
 test-files/
 Sample_Docs/
+.venv-pdf/
+pdf-layout-test/
+test-malayalam-puppeteer.js
