@@ -46,6 +46,34 @@ const translationSchema = new mongoose.Schema(
       default: [],
     },
 
+    legalTerms: {
+      type: [
+        {
+          term: {
+            type: String,
+            required: true,
+          },
+          definition: {
+            type: String,
+            default: "",
+          },
+          start: {
+            type: Number,
+            required: true,
+          },
+          end: {
+            type: Number,
+            required: true,
+          },
+          matchedText: {
+            type: String,
+            default: "",
+          },
+        },
+      ],
+      default: [],
+    },
+
     status: {
       type: String,
       enum: ["pending", "processing", "completed", "failed"],

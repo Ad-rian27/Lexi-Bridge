@@ -20,6 +20,8 @@
     "multer": "^2.3.0",
     "node-tesseract-ocr": "^2.2.1",
     "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.20.2",
+    "puppeteer-core": "^25.12.0",
     "sarvamai": "^1.1.10"
   }
 }

@@ -8,6 +8,8 @@ function TranslationViewer() {
   const [pdfUrl, setPdfUrl] = useState("");
   const [pdfLoading, setPdfLoading] = useState(true);
   const [pdfError, setPdfError] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const [popupPosition, setPopupPosition] = useState({
     top: 0,
     left: 0,
@@ -64,7 +66,54 @@ function TranslationViewer() {
   const result = JSON.parse(savedResult);
   const translation = result.translation;
 
+  console.log("Translation ID:", translation._id);
+  console.log("Translation object:", translation);
+  console.log("Result object:", result);
+
+  console.log("Translation object:", translation);
+
   const documentId = translation.documentId;
+
+  const handleDownloadPdf = async () => {
+    try {
+      setDownloading(true);
+      setDownloadError("");
+
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(
+        `http://localhost:5000/api/translations/${translation.id}/download`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to download translated PDF.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `LexiBridge_${translation.targetLanguage}.pdf`;
+
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("PDF download error:", error);
+      setDownloadError("Unable to download the translated PDF.");
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   useEffect(() => {
     if (!documentId) {
@@ -222,6 +271,10 @@ function TranslationViewer() {
         <h1>Translated Document</h1>
 
         <span>{translation.targetLanguage}</span>
+
+        <button onClick={handleDownloadPdf} disabled={downloading}>
+          {downloading ? "Preparing PDF..." : "Download PDF"}
+        </button>
       </header>
 
       <div className="viewer-layout">
@@ -250,6 +303,10 @@ function TranslationViewer() {
         </section>
         <main className="document-content">
           <h2>Translated Text</h2>
+
+          {downloadError && (
+            <div className="pdf-error-state">{downloadError}</div>
+          )}
 
           <p className="highlight-instruction">
             Select a legal term from the sidebar to highlight all its

@@ -77,14 +77,44 @@ function TranslationSetup() {
       console.log("Translation response:", data);
 
       const translation = data.translation;
-      const firstTerm = translation.legalTerms[0];
 
-      console.log(
-        "Offset verification:",
-        translation.translatedText.slice(firstTerm.start, firstTerm.end),
+      // Handle an existing translation
+      if (data.reused) {
+        console.log("Existing translation found. Redirecting to viewer.");
+
+        sessionStorage.setItem(
+          "translationResult",
+          JSON.stringify({
+            ...data,
+            highlightTerms: data.legalTerms || [],
+          }),
+        );
+
+        window.location.href = "/viewer";
+        return;
+      }
+
+      // Handle a newly generated translation
+      const firstTerm = translation.legalTerms?.[0];
+
+      if (firstTerm) {
+        console.log(
+          "Offset verification:",
+          translation.translatedText.slice(firstTerm.start, firstTerm.end),
+        );
+
+        console.log("Expected matched text:", firstTerm.matchedText);
+      }
+
+      sessionStorage.setItem(
+        "translationResult",
+        JSON.stringify({
+          ...data,
+          highlightTerms: highlightTerms || [],
+        }),
       );
 
-      console.log("Expected matched text:", firstTerm.matchedText);
+      window.location.href = "/viewer";
 
       sessionStorage.setItem(
         "translationResult",

@@ -7,6 +7,10 @@ const documentSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    fileHash: {
+      type: String,
+      required: true,
+    },
 
     originalFilename: {
       type: String,
@@ -62,5 +66,6 @@ const documentSchema = new mongoose.Schema(
 );
 
 documentSchema.index({ userId: 1 });
+documentSchema.index({ userId: 1, fileHash: 1 });
 
 module.exports = mongoose.model("Document", documentSchema);

@@ -1,12 +1,12 @@
 const express = require("express");
 const multer = require("multer");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const mongoose = require("mongoose");
 const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
 const { extractTextFromPDF } = require("../services/documentService");
-
 
 const router = express.Router();
 
@@ -26,10 +26,38 @@ router.post(
         });
       }
 
+      const fileBuffer = require("fs").readFileSync(req.file.path);
+
+      const fileHash = crypto
+        .createHash("sha256")
+        .update(fileBuffer)
+        .digest("hex");
+
+      console.log("Uploaded PDF Hash:", fileHash);
+
+      const existingDocument = await Document.findOne({
+        userId: req.user.userId,
+        fileHash,
+      });
+
+      if (existingDocument) {
+        return res.status(200).json({
+          message: "Document already exists",
+          reused: true,
+          document: {
+            id: existingDocument._id,
+            originalFilename: existingDocument.originalFilename,
+            extractionMethod: existingDocument.extractionMethod,
+            processingStatus: existingDocument.processingStatus,
+          },
+        });
+      }
+
       const result = await extractTextFromPDF(req.file.path);
 
       const document = new Document({
         userId: req.user.userId,
+        fileHash,
         originalFilename: req.file.originalname,
         storedFilename: req.file.filename,
         filePath: req.file.path,
@@ -62,22 +90,22 @@ router.post(
 );
 
 router.get("/", authMiddleware, async (req, res) => {
-    try {
-        const documents = await Document.find({
-            userId: req.user.userId
-        }).sort({ createdAt: -1 });
+  try {
+    const documents = await Document.find({
+      userId: req.user.userId,
+    }).sort({ createdAt: -1 });
 
-        res.status(200).json({
-            documents
-        });
-    } catch (error) {
-        console.error("Failed to fetch documents:", error);
+    res.status(200).json({
+      documents,
+    });
+  } catch (error) {
+    console.error("Failed to fetch documents:", error);
 
-        res.status(500).json({
-            message: "Failed to fetch documents",
-            error: error.message
-        });
-    }
+    res.status(500).json({
+      message: "Failed to fetch documents",
+      error: error.message,
+    });
+  }
 });
 
 router.get("/:id/file", authMiddleware, async (req, res) => {
@@ -112,7 +140,7 @@ router.get("/:id/file", authMiddleware, async (req, res) => {
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      `inline; filename="${encodeURIComponent(document.originalFilename)}"`
+      `inline; filename="${encodeURIComponent(document.originalFilename)}"`,
     );
 
     return res.sendFile(filePath);
