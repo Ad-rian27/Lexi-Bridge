@@ -12,7 +12,13 @@ async function testMalayalam() {
 
   const page = await browser.newPage();
 
-  const fontPath = path.resolve("backend/fonts/NotoSansMalayalam-Regular.ttf");
+  console.log("Current directory:", process.cwd());
+  console.log("Font path:", fontPath);
+  console.log("Font exists:", fs.existsSync(fontPath));
+
+  if (!fs.existsSync(fontPath)) {
+    throw new Error(`Malayalam font not found: ${fontPath}`);
+  }
 
   const fontBase64 = fs.readFileSync(fontPath).toString("base64");
 
@@ -55,6 +61,22 @@ async function testMalayalam() {
   const outputPath = path.resolve(
     "pdf-layout-test/malayalam_chromium_test.pdf",
   );
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
+
+  const fontStatus = await page.evaluate(() => ({
+    fontLoaded: document.fonts.check('24px "NotoMalayalam"', "മലയാളം"),
+    fonts: [...document.fonts].map((font) => ({
+      family: font.family,
+      status: font.status,
+    })),
+  }));
+
+  console.log("Font status:", fontStatus);
 
   await page.pdf({
     path: outputPath,

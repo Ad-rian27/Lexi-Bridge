@@ -1,8 +1,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { hasAdminRole } from "../services/authSession.js";
 
-const links = [
+const workspaceLinks = [
   ["/dashboard", "Overview", "overview"],
   ["/documents", "Documents", "documents"],
   ["/translate", "New translation", "translate"],
@@ -32,6 +33,12 @@ function NavIcon({ name }) {
       <>
         <circle cx="12" cy="12" r="8.5" />
         <path d="M12 7v5l3.5 2" />
+      </>
+    ),
+    admin: (
+      <>
+        <path d="M12 3 20 6v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z" />
+        <path d="m8.5 12 2.2 2.2 4.8-5" />
       </>
     ),
     theme: (
@@ -82,6 +89,9 @@ export default function AppShell({ children }) {
   const wasMobileMenuOpen = useRef(false);
 
   const activePath = pathname === "/viewer" ? "/translate" : pathname;
+  const links = hasAdminRole()
+    ? [...workspaceLinks, ["/admin", "Admin overview", "admin"]]
+    : workspaceLinks;
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
