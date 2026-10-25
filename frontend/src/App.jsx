@@ -10,9 +10,18 @@ import TranslationHistory from "./pages/TranslationHistory.jsx";
 import TranslationSetup from "./pages/TranslationSetup.jsx";
 import TranslationViewer from "./pages/TranslationViewer.jsx";
 import UploadDocument from "./pages/UploadDocument.jsx";
+import AdminDashboard from "./pages/AdminDashboard.jsx";
+import { hasAdminRole } from "./services/authSession.js";
 
 function Workspace({ children }) {
   return <AppShell>{children}</AppShell>;
+}
+
+function AdminRoute() {
+  const token = localStorage.getItem("token");
+  if (!token) return <Navigate to="/login" replace />;
+  if (!hasAdminRole()) return <Navigate to="/dashboard" replace />;
+  return <Workspace><AdminDashboard /></Workspace>;
 }
 
 function App() {
@@ -36,6 +45,8 @@ function App() {
           </Workspace>
         }
       />
+
+      <Route path="/admin" element={<AdminRoute />} />
 
       <Route
         path="/documents"

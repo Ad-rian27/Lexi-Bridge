@@ -5,6 +5,7 @@ require("dotenv").config();
 const authRoutes = require("./routes/auth");
 const documentRoutes = require("./routes/document");
 const translationRoutes = require("./routes/translation");
+const adminRoutes = require("./routes/admin");
 
 const app = express();
 
@@ -13,6 +14,7 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/translations", translationRoutes);
+app.use("/api/admin", adminRoutes);
 app.post("/api/tts/malayalam", async (req, res) => {
   try {
     const { text } = req.body;
