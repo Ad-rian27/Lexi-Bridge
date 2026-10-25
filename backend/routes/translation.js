@@ -1,4 +1,3 @@
-
 const express = require("express");
 const puppeteer = require("puppeteer");
 const path = require("path");
@@ -13,9 +12,7 @@ const {
   translatePages,
 } = require("../services/translationService");
 
-const {
-  detectTranslatedLegalTerms,
-} = require("../services/legalTermService");
+const { detectTranslatedLegalTerms } = require("../services/legalTermService");
 
 const router = express.Router();
 
@@ -97,28 +94,23 @@ router.post("/translate", authMiddleware, async (req, res) => {
       let translatedPages = [];
       let translatedText = "";
 
-      if (
-        document.extractedPages &&
-        document.extractedPages.length > 0
-      ) {
+      if (document.extractedPages && document.extractedPages.length > 0) {
         translatedPages = await translatePages(
           document.extractedPages,
-          targetLanguage
+          targetLanguage,
         );
 
-        translatedText = translatedPages
-          .map((page) => page.text)
-          .join("\n\n");
+        translatedText = translatedPages.map((page) => page.text).join("\n\n");
       } else {
         translatedText = await translateLongText(
           document.extractedText,
-          targetLanguage
+          targetLanguage,
         );
       }
 
       const legalTerms = await detectTranslatedLegalTerms(
         translatedText,
-        targetLanguage
+        targetLanguage,
       );
 
       translation.translatedText = translatedText;
@@ -163,9 +155,7 @@ router.get("/", authMiddleware, async (req, res) => {
     }).sort({ createdAt: -1 });
 
     const documentIds = [
-      ...new Set(
-        translations.map((item) => String(item.documentId))
-      ),
+      ...new Set(translations.map((item) => String(item.documentId))),
     ];
 
     const documents = await Document.find({
@@ -177,15 +167,14 @@ router.get("/", authMiddleware, async (req, res) => {
       documents.map((document) => [
         String(document._id),
         document.originalFilename,
-      ])
+      ]),
     );
 
     const history = translations.map((item) => ({
       _id: item._id,
       documentId: item.documentId,
       documentName:
-        documentMap.get(String(item.documentId)) ||
-        "Document unavailable",
+        documentMap.get(String(item.documentId)) || "Document unavailable",
       targetLanguage: item.targetLanguage,
       sourceLanguage: item.sourceLanguage,
       status: item.status,
@@ -196,10 +185,7 @@ router.get("/", authMiddleware, async (req, res) => {
       translations: history,
     });
   } catch (error) {
-    console.error(
-      "Failed to fetch translation history:",
-      error
-    );
+    console.error("Failed to fetch translation history:", error);
 
     return res.status(500).json({
       message: "Failed to load translation history",
@@ -236,10 +222,7 @@ router.get("/:translationId", authMiddleware, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error(
-      "Failed to fetch saved translation:",
-      error
-    );
+    console.error("Failed to fetch saved translation:", error);
 
     return res.status(500).json({
       message: "Failed to load saved translation",
@@ -249,106 +232,96 @@ router.get("/:translationId", authMiddleware, async (req, res) => {
 });
 
 // Download a translated document as PDF
-router.get(
-  "/:translationId/download",
-  authMiddleware,
-  async (req, res) => {
-    let browser;
+router.get("/:translationId/download", authMiddleware, async (req, res) => {
+  let browser;
 
-    try {
-      const { translationId } = req.params;
+  try {
+    const { translationId } = req.params;
 
-      // Find the translation belonging to the logged-in user
-      const translation = await Translation.findOne({
-        _id: translationId,
-        userId: req.user.userId,
+    // Find the translation belonging to the logged-in user
+    const translation = await Translation.findOne({
+      _id: translationId,
+      userId: req.user.userId,
+    });
+
+    if (!translation) {
+      return res.status(404).json({
+        message: "Translation not found",
       });
+    }
 
-      if (!translation) {
-        return res.status(404).json({
-          message: "Translation not found",
-        });
-      }
+    // Confirm that the associated document exists in the database
+    const originalDocument = await Document.findOne({
+      _id: translation.documentId,
+      userId: req.user.userId,
+    });
 
-      // Confirm that the associated document exists in the database
-      const originalDocument = await Document.findOne({
-        _id: translation.documentId,
-        userId: req.user.userId,
+    if (!originalDocument) {
+      return res.status(404).json({
+        message: "Original document not found",
       });
+    }
 
-      if (!originalDocument) {
-        return res.status(404).json({
-          message: "Original document not found",
-        });
-      }
+    if (translation.status !== "completed") {
+      return res.status(400).json({
+        message: "Translation is not completed yet",
+      });
+    }
 
-      if (translation.status !== "completed") {
-        return res.status(400).json({
-          message: "Translation is not completed yet",
-        });
-      }
+    // Select the font for the translated language
+    const fontFiles = {
+      Malayalam: "NotoSansMalayalam-Regular.ttf",
+      Hindi: "NotoSansDevanagari-Regular.ttf",
+      Tamil: "NotoSansTamil-Regular.ttf",
+    };
 
-      // Select the font for the translated language
-      const fontFiles = {
-        Malayalam: "NotoSansMalayalam-Regular.ttf",
-        Hindi: "NotoSansDevanagari-Regular.ttf",
-        Tamil: "NotoSansTamil-Regular.ttf",
-      };
+    const fontFile = fontFiles[translation.targetLanguage];
 
-      const fontFile = fontFiles[translation.targetLanguage];
+    if (!fontFile) {
+      return res.status(400).json({
+        message: "Unsupported translation language",
+      });
+    }
 
-      if (!fontFile) {
-        return res.status(400).json({
-          message: "Unsupported translation language",
-        });
-      }
+    const fontPath = path.join(__dirname, "../fonts", fontFile);
 
-      const fontPath = path.join(
-        __dirname,
-        "../fonts",
-        fontFile
-      );
+    if (!fs.existsSync(fontPath)) {
+      return res.status(500).json({
+        message: `Font file not found: ${fontFile}`,
+      });
+    }
 
-      if (!fs.existsSync(fontPath)) {
-        return res.status(500).json({
-          message: `Font file not found: ${fontFile}`,
-        });
-      }
+    // Prepare translated pages
+    const pages =
+      translation.translatedPages && translation.translatedPages.length > 0
+        ? translation.translatedPages
+        : [
+            {
+              pageNumber: 1,
+              text: translation.translatedText || "",
+            },
+          ];
 
-      // Prepare translated pages
-      const pages =
-        translation.translatedPages &&
-        translation.translatedPages.length > 0
-          ? translation.translatedPages
-          : [
-              {
-                pageNumber: 1,
-                text: translation.translatedText || "",
-              },
-            ];
+    // Escape HTML characters in translated text
+    const escapeHtml = (text) =>
+      String(text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 
-      // Escape HTML characters in translated text
-      const escapeHtml = (text) =>
-        String(text || "")
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;");
-
-      const pageContent = pages
-        .map(
-          (page) => `
+    const pageContent = pages
+      .map(
+        (page) => `
             <section class="document-page">
-              <div class="translated-text">${escapeHtml(
-                page.text
-              )}</div>
+              <div class="translated-text">${escapeHtml(page.text)}</div>
             </section>
-          `
-        )
-        .join("");
+          `,
+      )
+      .join("");
 
-      const html = `
+    const html = `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -406,63 +379,59 @@ router.get(
         </html>
       `;
 
-      // Launch Puppeteer's bundled Chromium.
-      // This avoids using a Windows-specific Chrome path on Render.
-      browser = await puppeteer.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-        ],
+    // Launch Puppeteer's bundled Chromium.
+    // This avoids using a Windows-specific Chrome path on Render.
+    const chromePath =
+      "/opt/render/.cache/puppeteer/chrome/linux-156.0.8078.47/chrome-linux64/chrome";
+
+    console.log("Chrome executable:", chromePath);
+    console.log("Chrome exists:", fs.existsSync(chromePath));
+
+    browser = await puppeteer.launch({
+      executablePath: chromePath,
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    const page = await browser.newPage();
+
+    await page.setContent(html, {
+      waitUntil: "networkidle0",
+    });
+
+    await page.evaluate(() => document.fonts.ready);
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      preferCSSPageSize: true,
+    });
+
+    const filename = `LexiBridge_${translation.targetLanguage}.pdf`;
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", pdfBuffer.length);
+
+    return res.end(pdfBuffer);
+  } catch (error) {
+    console.error("PDF generation failed:", error);
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        message: "Failed to generate translated PDF",
+        error: error.message,
       });
-
-      const page = await browser.newPage();
-
-      await page.setContent(html, {
-        waitUntil: "networkidle0",
-      });
-
-      await page.evaluate(() => document.fonts.ready);
-
-      const pdfBuffer = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        preferCSSPageSize: true,
-      });
-
-      const filename =
-        `LexiBridge_${translation.targetLanguage}.pdf`;
-
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${filename}"`
-      );
-      res.setHeader("Content-Length", pdfBuffer.length);
-
-      return res.end(pdfBuffer);
-    } catch (error) {
-      console.error("PDF generation failed:", error);
-
-      if (!res.headersSent) {
-        return res.status(500).json({
-          message: "Failed to generate translated PDF",
-          error: error.message,
-        });
-      }
-    } finally {
-      if (browser) {
-        try {
-          await browser.close();
-        } catch (closeError) {
-          console.error(
-            "Failed to close Puppeteer browser:",
-            closeError
-          );
-        }
+    }
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error("Failed to close Puppeteer browser:", closeError);
       }
     }
   }
-);
+});
 
 module.exports = router;
