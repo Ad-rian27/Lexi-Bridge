@@ -389,10 +389,16 @@ router.get("/:translationId/download", authMiddleware, async (req, res) => {
     const page = await browser.newPage();
 
     await page.setContent(html, {
-      waitUntil: "networkidle0",
+      waitUntil: "load",
+      timeout: 60000,
     });
 
-    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(async () => {
+      await Promise.race([
+        document.fonts.ready,
+        new Promise((resolve) => setTimeout(resolve, 10000)),
+      ]);
+    });
 
     const pdfBuffer = await page.pdf({
       format: "A4",
