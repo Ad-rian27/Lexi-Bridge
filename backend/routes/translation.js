@@ -1,13 +1,12 @@
 
 const express = require("express");
-const puppeteer = require("puppeteer-core");
+const puppeteer = require("puppeteer");
 const path = require("path");
 const fs = require("fs");
 
 const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
 const Translation = require("../models/Translation");
-const LegalTerm = require("../models/LegalTerm");
 
 const {
   translateLongText,
@@ -26,16 +25,7 @@ const supportedLanguages = {
   "ta-IN": "Tamil",
 };
 
-const languageMap = {
-  Malayalam: "ml-IN",
-  Hindi: "hi-IN",
-  Tamil: "ta-IN",
-  "ml-IN": "ml-IN",
-  "hi-IN": "hi-IN",
-  "ta-IN": "ta-IN",
-};
-
-// Translate a document.
+// Translate a document
 router.post("/translate", authMiddleware, async (req, res) => {
   try {
     const { documentId, targetLanguage } = req.body;
@@ -63,6 +53,7 @@ router.post("/translate", authMiddleware, async (req, res) => {
       });
     }
 
+    // Reuse an existing completed translation when available
     const existingTranslation = await Translation.findOne({
       documentId: document._id,
       userId: req.user.userId,
@@ -116,7 +107,7 @@ router.post("/translate", authMiddleware, async (req, res) => {
         );
 
         translatedText = translatedPages
-          .map((page) => page.text || "")
+          .map((page) => page.text)
           .join("\n\n");
       } else {
         translatedText = await translateLongText(
@@ -164,7 +155,7 @@ router.post("/translate", authMiddleware, async (req, res) => {
   }
 });
 
-// Get translation history.
+// Get translation history
 router.get("/", authMiddleware, async (req, res) => {
   try {
     const translations = await Translation.find({
@@ -205,7 +196,10 @@ router.get("/", authMiddleware, async (req, res) => {
       translations: history,
     });
   } catch (error) {
-    console.error("Failed to fetch translation history:", error);
+    console.error(
+      "Failed to fetch translation history:",
+      error
+    );
 
     return res.status(500).json({
       message: "Failed to load translation history",
@@ -213,8 +207,7 @@ router.get("/", authMiddleware, async (req, res) => {
   }
 });
 
-// Get a saved translation and repair missing legal-term data automatically.
-
+// Get a saved translation
 router.get("/:translationId", authMiddleware, async (req, res) => {
   try {
     const translation = await Translation.findOne({
@@ -226,38 +219,6 @@ router.get("/:translationId", authMiddleware, async (req, res) => {
       return res.status(404).json({
         message: "Translation not found",
       });
-    }
-
-    // Map the saved language name to the key expected by the glossary service.
-    const languageMap = {
-      Malayalam: "ml-IN",
-      Hindi: "hi-IN",
-      Tamil: "ta-IN",
-    };
-
-    const targetLanguage = languageMap[translation.targetLanguage];
-
-    // Rebuild glossary details using the saved translated text.
-    // This does NOT call the translation provider.
-    if (targetLanguage) {
-      const translatedText =
-        translation.translatedText ||
-        (translation.translatedPages || [])
-          .map((page) => page.text || "")
-          .filter(Boolean)
-          .join("\n\n");
-
-      if (translatedText.trim()) {
-        const latestLegalTerms = await detectTranslatedLegalTerms(
-          translatedText,
-          targetLanguage
-        );
-
-        if (latestLegalTerms.length > 0) {
-          translation.legalTerms = latestLegalTerms;
-          await translation.save();
-        }
-      }
     }
 
     return res.status(200).json({
@@ -275,7 +236,10 @@ router.get("/:translationId", authMiddleware, async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Failed to fetch saved translation:", error);
+    console.error(
+      "Failed to fetch saved translation:",
+      error
+    );
 
     return res.status(500).json({
       message: "Failed to load saved translation",
@@ -284,11 +248,7 @@ router.get("/:translationId", authMiddleware, async (req, res) => {
   }
 });
 
-
-
-
-
-// Download translated document as PDF.
+// Download a translated document as PDF
 router.get(
   "/:translationId/download",
   authMiddleware,
@@ -298,6 +258,7 @@ router.get(
     try {
       const { translationId } = req.params;
 
+      // Find the translation belonging to the logged-in user
       const translation = await Translation.findOne({
         _id: translationId,
         userId: req.user.userId,
@@ -309,6 +270,7 @@ router.get(
         });
       }
 
+      // Confirm that the associated document exists in the database
       const originalDocument = await Document.findOne({
         _id: translation.documentId,
         userId: req.user.userId,
@@ -320,22 +282,13 @@ router.get(
         });
       }
 
-      const originalPdfPath = path.resolve(
-        originalDocument.filePath
-      );
-
-      if (!fs.existsSync(originalPdfPath)) {
-        return res.status(404).json({
-          message: "Original PDF file not found",
-        });
-      }
-
       if (translation.status !== "completed") {
         return res.status(400).json({
           message: "Translation is not completed yet",
         });
       }
 
+      // Select the font for the translated language
       const fontFiles = {
         Malayalam: "NotoSansMalayalam-Regular.ttf",
         Hindi: "NotoSansDevanagari-Regular.ttf",
@@ -356,6 +309,13 @@ router.get(
         fontFile
       );
 
+      if (!fs.existsSync(fontPath)) {
+        return res.status(500).json({
+          message: `Font file not found: ${fontFile}`,
+        });
+      }
+
+      // Prepare translated pages
       const pages =
         translation.translatedPages &&
         translation.translatedPages.length > 0
@@ -363,10 +323,11 @@ router.get(
           : [
               {
                 pageNumber: 1,
-                text: translation.translatedText,
+                text: translation.translatedText || "",
               },
             ];
 
+      // Escape HTML characters in translated text
       const escapeHtml = (text) =>
         String(text || "")
           .replace(/&/g, "&amp;")
@@ -391,7 +352,8 @@ router.get(
         <!DOCTYPE html>
         <html lang="en">
         <head>
-          <meta charset="UTF-8">
+          <meta charset="UTF-8" />
+
           <style>
             @font-face {
               font-family: "LexiBridgeFont";
@@ -421,11 +383,6 @@ router.get(
               font-family: Arial, sans-serif;
             }
 
-            .subtitle {
-              font-size: 11pt;
-              color: #666;
-            }
-
             .document-page {
               position: relative;
               page-break-after: auto;
@@ -441,6 +398,7 @@ router.get(
             }
           </style>
         </head>
+
         <body>
           <div class="watermark">LexiBridge AI</div>
           ${pageContent}
@@ -448,11 +406,14 @@ router.get(
         </html>
       `;
 
+      // Launch Puppeteer's bundled Chromium.
+      // This avoids using a Windows-specific Chrome path on Render.
       browser = await puppeteer.launch({
-        executablePath:
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
         headless: true,
-        args: ["--no-sandbox"],
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+        ],
       });
 
       const page = await browser.newPage();
@@ -491,7 +452,14 @@ router.get(
       }
     } finally {
       if (browser) {
-        await browser.close();
+        try {
+          await browser.close();
+        } catch (closeError) {
+          console.error(
+            "Failed to close Puppeteer browser:",
+            closeError
+          );
+        }
       }
     }
   }
