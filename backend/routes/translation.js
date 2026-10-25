@@ -381,14 +381,7 @@ router.get("/:translationId/download", authMiddleware, async (req, res) => {
 
     // Launch Puppeteer's bundled Chromium.
     // This avoids using a Windows-specific Chrome path on Render.
-    const chromePath =
-      "/opt/render/.cache/puppeteer/chrome/linux-156.0.8078.47/chrome-linux64/chrome";
-
-    console.log("Chrome executable:", chromePath);
-    console.log("Chrome exists:", fs.existsSync(chromePath));
-
     browser = await puppeteer.launch({
-      executablePath: chromePath,
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
