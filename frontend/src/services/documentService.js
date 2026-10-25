@@ -30,3 +30,9 @@ export const getDocumentPdf = async (documentId) => {
 
     return response.data;
 };
+
+
+export const deleteDocument = async (documentId) => {
+  const response = await api.delete(`/documents/${documentId}`);
+  return response.data;
+};

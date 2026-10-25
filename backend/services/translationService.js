@@ -119,8 +119,40 @@ async function translatePages(pages, targetLanguage) {
     return translatedPages;
 }
 
+
+async function translateTextBlocks(blocks, targetLanguage) {
+    const translatedBlocks = [];
+
+    for (const block of blocks) {
+        const originalText = String(block.text || "").trim();
+
+        if (!originalText) {
+            continue;
+        }
+
+        console.log(`Translating block ${block.blockId}...`);
+
+        const translatedText = await translateLongText(
+            originalText,
+            targetLanguage
+        );
+
+        translatedBlocks.push({
+            blockId: block.blockId,
+            pageNumber: block.pageNumber,
+            originalText,
+            translatedText,
+            bbox: block.bbox,
+        });
+    }
+
+    return translatedBlocks;
+}
+
+
 module.exports = {
     translateText,
     translateLongText,
-    translatePages
+    translatePages,
+    translateTextBlocks
 };

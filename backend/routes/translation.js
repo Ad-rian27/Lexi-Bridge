@@ -1,13 +1,20 @@
+
 const express = require("express");
+const puppeteer = require("puppeteer-core");
+const path = require("path");
+const fs = require("fs");
+
 const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
 const Translation = require("../models/Translation");
+const LegalTerm = require("../models/LegalTerm");
+
 const {
   translateLongText,
   translatePages,
 } = require("../services/translationService");
+
 const {
-  detectLegalTerms,
   detectTranslatedLegalTerms,
 } = require("../services/legalTermService");
 
@@ -19,25 +26,32 @@ const supportedLanguages = {
   "ta-IN": "Tamil",
 };
 
+const languageMap = {
+  Malayalam: "ml-IN",
+  Hindi: "hi-IN",
+  Tamil: "ta-IN",
+  "ml-IN": "ml-IN",
+  "hi-IN": "hi-IN",
+  "ta-IN": "ta-IN",
+};
+
+// Translate a document.
 router.post("/translate", authMiddleware, async (req, res) => {
   try {
     const { documentId, targetLanguage } = req.body;
 
-    // Validate input
     if (!documentId || !targetLanguage) {
       return res.status(400).json({
         message: "documentId and targetLanguage are required",
       });
     }
 
-    // Validate target language
     if (!supportedLanguages[targetLanguage]) {
       return res.status(400).json({
         message: "Unsupported target language",
       });
     }
 
-    // Find the document belonging to the logged-in user
     const document = await Document.findOne({
       _id: documentId,
       userId: req.user.userId,
@@ -49,13 +63,35 @@ router.post("/translate", authMiddleware, async (req, res) => {
       });
     }
 
+    const existingTranslation = await Translation.findOne({
+      documentId: document._id,
+      userId: req.user.userId,
+      targetLanguage: supportedLanguages[targetLanguage],
+      status: "completed",
+    }).sort({ createdAt: -1 });
+
+    if (existingTranslation) {
+      return res.status(200).json({
+        message: "Existing translation retrieved successfully",
+        reused: true,
+        translation: {
+          id: existingTranslation._id,
+          documentId: existingTranslation.documentId,
+          targetLanguage: existingTranslation.targetLanguage,
+          status: existingTranslation.status,
+          translatedText: existingTranslation.translatedText,
+          translatedPages: existingTranslation.translatedPages,
+          legalTerms: existingTranslation.legalTerms || [],
+        },
+      });
+    }
+
     if (!document.extractedText) {
       return res.status(400).json({
         message: "Document has no extracted text",
       });
     }
 
-    // Create a pending translation record
     const translation = new Translation({
       documentId: document._id,
       userId: req.user.userId,
@@ -70,33 +106,38 @@ router.post("/translate", authMiddleware, async (req, res) => {
       let translatedPages = [];
       let translatedText = "";
 
-      if (document.extractedPages && document.extractedPages.length > 0) {
+      if (
+        document.extractedPages &&
+        document.extractedPages.length > 0
+      ) {
         translatedPages = await translatePages(
           document.extractedPages,
-          targetLanguage,
+          targetLanguage
         );
 
-        translatedText = translatedPages.map((page) => page.text).join("\n\n");
+        translatedText = translatedPages
+          .map((page) => page.text || "")
+          .join("\n\n");
       } else {
-        // Fallback for documents uploaded before page extraction was implemented
         translatedText = await translateLongText(
           document.extractedText,
-          targetLanguage,
+          targetLanguage
         );
       }
 
       const legalTerms = await detectTranslatedLegalTerms(
         translatedText,
-        targetLanguage,
+        targetLanguage
       );
 
       translation.translatedText = translatedText;
       translation.translatedPages = translatedPages;
+      translation.legalTerms = legalTerms;
       translation.status = "completed";
 
       await translation.save();
 
-      res.status(201).json({
+      return res.status(201).json({
         message: "Document translated successfully",
         translation: {
           id: translation._id,
@@ -111,17 +152,349 @@ router.post("/translate", authMiddleware, async (req, res) => {
     } catch (translationError) {
       translation.status = "failed";
       await translation.save();
-
       throw translationError;
     }
   } catch (error) {
     console.error("Translation failed:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Translation failed",
       error: error.message,
     });
   }
 });
+
+// Get translation history.
+router.get("/", authMiddleware, async (req, res) => {
+  try {
+    const translations = await Translation.find({
+      userId: req.user.userId,
+    }).sort({ createdAt: -1 });
+
+    const documentIds = [
+      ...new Set(
+        translations.map((item) => String(item.documentId))
+      ),
+    ];
+
+    const documents = await Document.find({
+      _id: { $in: documentIds },
+      userId: req.user.userId,
+    }).select("_id originalFilename");
+
+    const documentMap = new Map(
+      documents.map((document) => [
+        String(document._id),
+        document.originalFilename,
+      ])
+    );
+
+    const history = translations.map((item) => ({
+      _id: item._id,
+      documentId: item.documentId,
+      documentName:
+        documentMap.get(String(item.documentId)) ||
+        "Document unavailable",
+      targetLanguage: item.targetLanguage,
+      sourceLanguage: item.sourceLanguage,
+      status: item.status,
+      createdAt: item.createdAt,
+    }));
+
+    return res.status(200).json({
+      translations: history,
+    });
+  } catch (error) {
+    console.error("Failed to fetch translation history:", error);
+
+    return res.status(500).json({
+      message: "Failed to load translation history",
+    });
+  }
+});
+
+// Get a saved translation and repair missing legal-term data automatically.
+
+router.get("/:translationId", authMiddleware, async (req, res) => {
+  try {
+    const translation = await Translation.findOne({
+      _id: req.params.translationId,
+      userId: req.user.userId,
+    });
+
+    if (!translation) {
+      return res.status(404).json({
+        message: "Translation not found",
+      });
+    }
+
+    // Map the saved language name to the key expected by the glossary service.
+    const languageMap = {
+      Malayalam: "ml-IN",
+      Hindi: "hi-IN",
+      Tamil: "ta-IN",
+    };
+
+    const targetLanguage = languageMap[translation.targetLanguage];
+
+    // Rebuild glossary details using the saved translated text.
+    // This does NOT call the translation provider.
+    if (targetLanguage) {
+      const translatedText =
+        translation.translatedText ||
+        (translation.translatedPages || [])
+          .map((page) => page.text || "")
+          .filter(Boolean)
+          .join("\n\n");
+
+      if (translatedText.trim()) {
+        const latestLegalTerms = await detectTranslatedLegalTerms(
+          translatedText,
+          targetLanguage
+        );
+
+        if (latestLegalTerms.length > 0) {
+          translation.legalTerms = latestLegalTerms;
+          await translation.save();
+        }
+      }
+    }
+
+    return res.status(200).json({
+      translation: {
+        _id: translation._id,
+        id: translation._id,
+        documentId: translation.documentId,
+        sourceLanguage: translation.sourceLanguage,
+        targetLanguage: translation.targetLanguage,
+        status: translation.status,
+        translatedText: translation.translatedText || "",
+        translatedPages: translation.translatedPages || [],
+        legalTerms: translation.legalTerms || [],
+        createdAt: translation.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to fetch saved translation:", error);
+
+    return res.status(500).json({
+      message: "Failed to load saved translation",
+      error: error.message,
+    });
+  }
+});
+
+
+
+
+
+// Download translated document as PDF.
+router.get(
+  "/:translationId/download",
+  authMiddleware,
+  async (req, res) => {
+    let browser;
+
+    try {
+      const { translationId } = req.params;
+
+      const translation = await Translation.findOne({
+        _id: translationId,
+        userId: req.user.userId,
+      });
+
+      if (!translation) {
+        return res.status(404).json({
+          message: "Translation not found",
+        });
+      }
+
+      const originalDocument = await Document.findOne({
+        _id: translation.documentId,
+        userId: req.user.userId,
+      });
+
+      if (!originalDocument) {
+        return res.status(404).json({
+          message: "Original document not found",
+        });
+      }
+
+      const originalPdfPath = path.resolve(
+        originalDocument.filePath
+      );
+
+      if (!fs.existsSync(originalPdfPath)) {
+        return res.status(404).json({
+          message: "Original PDF file not found",
+        });
+      }
+
+      if (translation.status !== "completed") {
+        return res.status(400).json({
+          message: "Translation is not completed yet",
+        });
+      }
+
+      const fontFiles = {
+        Malayalam: "NotoSansMalayalam-Regular.ttf",
+        Hindi: "NotoSansDevanagari-Regular.ttf",
+        Tamil: "NotoSansTamil-Regular.ttf",
+      };
+
+      const fontFile = fontFiles[translation.targetLanguage];
+
+      if (!fontFile) {
+        return res.status(400).json({
+          message: "Unsupported translation language",
+        });
+      }
+
+      const fontPath = path.join(
+        __dirname,
+        "../fonts",
+        fontFile
+      );
+
+      const pages =
+        translation.translatedPages &&
+        translation.translatedPages.length > 0
+          ? translation.translatedPages
+          : [
+              {
+                pageNumber: 1,
+                text: translation.translatedText,
+              },
+            ];
+
+      const escapeHtml = (text) =>
+        String(text || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+
+      const pageContent = pages
+        .map(
+          (page) => `
+            <section class="document-page">
+              <div class="translated-text">${escapeHtml(
+                page.text
+              )}</div>
+            </section>
+          `
+        )
+        .join("");
+
+      const html = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            @font-face {
+              font-family: "LexiBridgeFont";
+              src: url("file://${fontPath.replace(/\\/g, "/")}");
+            }
+
+            @page {
+              size: A4;
+              margin: 22mm 20mm 25mm 20mm;
+            }
+
+            body {
+              font-family: "LexiBridgeFont", sans-serif;
+              color: #222;
+              font-size: 12pt;
+              line-height: 1.8;
+            }
+
+            .watermark {
+              position: fixed;
+              bottom: 8mm;
+              right: 20mm;
+              font-size: 9pt;
+              color: #999;
+              opacity: 0.55;
+              font-style: italic;
+              font-family: Arial, sans-serif;
+            }
+
+            .subtitle {
+              font-size: 11pt;
+              color: #666;
+            }
+
+            .document-page {
+              position: relative;
+              page-break-after: auto;
+              break-after: auto;
+            }
+
+            .translated-text {
+              white-space: pre-wrap;
+              overflow-wrap: break-word;
+              text-align: justify;
+              font-size: 12pt;
+              line-height: 1.5;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="watermark">LexiBridge AI</div>
+          ${pageContent}
+        </body>
+        </html>
+      `;
+
+      browser = await puppeteer.launch({
+        executablePath:
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        headless: true,
+        args: ["--no-sandbox"],
+      });
+
+      const page = await browser.newPage();
+
+      await page.setContent(html, {
+        waitUntil: "networkidle0",
+      });
+
+      await page.evaluate(() => document.fonts.ready);
+
+      const pdfBuffer = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        preferCSSPageSize: true,
+      });
+
+      const filename =
+        `LexiBridge_${translation.targetLanguage}.pdf`;
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${filename}"`
+      );
+      res.setHeader("Content-Length", pdfBuffer.length);
+
+      return res.end(pdfBuffer);
+    } catch (error) {
+      console.error("PDF generation failed:", error);
+
+      if (!res.headersSent) {
+        return res.status(500).json({
+          message: "Failed to generate translated PDF",
+          error: error.message,
+        });
+      }
+    } finally {
+      if (browser) {
+        await browser.close();
+      }
+    }
+  }
+);
 
 module.exports = router;

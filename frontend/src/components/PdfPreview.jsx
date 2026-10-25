@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -9,15 +9,31 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
-function PdfPreview({ file }) {
+function PdfPreview({ file, pageNumber, onPageChange }) {
   const [numPages, setNumPages] = useState(null);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [internalPage, setInternalPage] = useState(1);
+  const currentPage = pageNumber ?? internalPage;
+  const setCurrentPage = (value) => {
+    const next = typeof value === "function" ? value(currentPage) : value;
+    if (pageNumber === undefined) setInternalPage(next);
+    onPageChange?.(next);
+  };
   const [scale, setScale] = useState(1);
   const [error, setError] = useState("");
+  const [containerWidth, setContainerWidth] = useState(550);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(([entry]) => setContainerWidth(Math.max(240, Math.min(900, entry.contentRect.width - 28))));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   function onDocumentLoadSuccess({ numPages }) {
     setNumPages(numPages);
-    setCurrentPage(1);
+    if (pageNumber === undefined) setCurrentPage(1);
     setError("");
   }
 
@@ -25,6 +41,7 @@ function PdfPreview({ file }) {
     console.error("PDF loading failed:", error);
     setError("Unable to load the PDF document.");
   }
+
 
   function previousPage() {
     setCurrentPage((page) => Math.max(1, page - 1));
@@ -50,7 +67,9 @@ function PdfPreview({ file }) {
     <div className="pdf-preview">
       <div className="pdf-toolbar">
         <div className="pdf-navigation">
-          <span>{numPages || "--"} Pages</span>
+          <button onClick={previousPage} disabled={currentPage <= 1} aria-label="Previous PDF page">Previous</button>
+          <span>Page {currentPage} of {numPages || "--"}</span>
+          <button onClick={nextPage} disabled={!numPages || currentPage >= numPages} aria-label="Next PDF page">Next</button>
         </div>
 
         <div className="pdf-zoom">
@@ -71,23 +90,23 @@ function PdfPreview({ file }) {
       {error ? (
         <p>{error}</p>
       ) : (
-        <div className="pdf-document-area">
+        <div className="pdf-document-area" ref={containerRef}>
           <Document
             file={file}
             onLoadSuccess={onDocumentLoadSuccess}
             onLoadError={onDocumentLoadError}
             loading={<p>Loading PDF...</p>}
           >
-            {Array.from(new Array(numPages), (_, index) => (
+            {numPages && (
               <Page
-                key={`page_${index + 1}`}
-                pageNumber={index + 1}
-                width={550 * scale}
+                key={`page_${currentPage}`}
+                pageNumber={currentPage}
+                width={containerWidth * scale}
                 renderTextLayer={true}
                 renderAnnotationLayer={true}
                 loading={<p>Rendering page...</p>}
               />
-            ))}
+            )}
           </Document>
         </div>
       )}

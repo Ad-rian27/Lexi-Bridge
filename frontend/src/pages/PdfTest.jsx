@@ -56,13 +56,13 @@ function PdfTest() {
     }, [selectedDocument]);
 
     return (
-        <div style={{ padding: "30px" }}>
-            <h1>LexiBridge PDF Preview Test</h1>
+        <main className="pdf-test-page">
+            <header className="page-heading"><div><p className="eyebrow">DOCUMENT PREVIEW</p><h1>PDF preview</h1></div></header>
 
-            <label>Select a document: </label>
+            <label htmlFor="pdf-test-document">Select a document</label>
 
             <select
-                value={selectedDocument}
+                id="pdf-test-document" value={selectedDocument}
                 onChange={(e) => setSelectedDocument(e.target.value)}
             >
                 <option value="">Choose a document</option>
@@ -76,12 +76,12 @@ function PdfTest() {
 
             {loading && <p>Loading PDF...</p>}
 
-            {error && <p style={{ color: "red" }}>{error}</p>}
+            {error && <p className="error-state" role="alert">{error}</p>}
 
             {pdfUrl && (
                 <PdfPreview file={pdfUrl} />
             )}
-        </div>
+        </main>
     );
 }
 
