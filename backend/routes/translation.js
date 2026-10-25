@@ -269,6 +269,8 @@ router.get("/:translationId/download", authMiddleware, async (req, res) => {
     }
 
     // Select the font for the translated language
+
+    // Select the correct font for each supported language.
     const fontFiles = {
       Malayalam: "NotoSansMalayalam-Regular.ttf",
       Hindi: "NotoSansDevanagari-Regular.ttf",
@@ -283,13 +285,15 @@ router.get("/:translationId/download", authMiddleware, async (req, res) => {
       });
     }
 
-    const fontPath = path.join(__dirname, "../fonts", fontFile);
+    const fontPath = path.resolve(__dirname, "../fonts", fontFile);
 
     if (!fs.existsSync(fontPath)) {
-      return res.status(500).json({
-        message: `Font file not found: ${fontFile}`,
-      });
+      throw new Error(`Required font file not found: ${fontPath}`);
     }
+
+    // Embed the font directly so Chromium does not depend
+    // on file:// URL resolution in the hosted environment.
+    const fontBase64 = fs.readFileSync(fontPath).toString("base64");
 
     // Prepare translated pages
     const pages =
@@ -329,9 +333,16 @@ router.get("/:translationId/download", authMiddleware, async (req, res) => {
 
           <style>
             @font-face {
-              font-family: "LexiBridgeFont";
-              src: url("file://${fontPath.replace(/\\/g, "/")}");
-            }
+  font-family: "LexiBridgeFont";
+  src: url("data:font/ttf;base64,${fontBase64}") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+body,
+.translated-text {
+  font-family: "LexiBridgeFont", sans-serif;
+}
 
             @page {
               size: A4;
