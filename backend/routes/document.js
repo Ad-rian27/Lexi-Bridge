@@ -6,6 +6,7 @@ const path = require("path");
 const mongoose = require("mongoose");
 const authMiddleware = require("../middleware/authMiddleware.js");
 const Document = require("../models/Document");
+const Translation = require("../models/Translation");
 const { extractTextFromPDF } = require("../services/documentService");
 
 const router = express.Router();
@@ -41,6 +42,11 @@ router.post(
       });
 
       if (existingDocument) {
+        // Remove the newly uploaded temporary file.
+        await fs.promises.unlink(req.file.path).catch((error) => {
+          console.error("Failed to remove duplicate temporary file:", error);
+        });
+
         return res.status(200).json({
           message: "Document already exists",
           reused: true,
@@ -149,6 +155,66 @@ router.get("/:id/file", authMiddleware, async (req, res) => {
 
     return res.status(500).json({
       message: "Failed to retrieve PDF",
+    });
+  }
+});
+
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({
+        message: "Invalid document ID",
+      });
+    }
+
+    // Only allow the owner to delete the document.
+    const document = await Document.findOne({
+      _id: id,
+      userId: req.user.userId,
+    });
+
+    if (!document) {
+      return res.status(404).json({
+        message: "Document not found",
+      });
+    }
+
+    // Find translations associated with this document.
+    const translations = await Translation.find({
+      documentId: document._id,
+      userId: req.user.userId,
+    }).select("_id");
+
+    // Remove translation records first.
+    await Translation.deleteMany({
+      documentId: document._id,
+      userId: req.user.userId,
+    });
+
+    // Remove the uploaded PDF if it exists.
+    const filePath = path.resolve(document.filePath);
+
+    if (fs.existsSync(filePath)) {
+      await fs.promises.unlink(filePath);
+    }
+
+    // Remove the document record.
+    await Document.deleteOne({
+      _id: document._id,
+      userId: req.user.userId,
+    });
+
+    return res.status(200).json({
+      message: "Document and associated translations deleted successfully",
+      deletedTranslations: translations.length,
+    });
+  } catch (error) {
+    console.error("Document deletion failed:", error);
+
+    return res.status(500).json({
+      message: "Failed to delete document",
     });
   }
 });

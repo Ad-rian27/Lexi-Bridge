@@ -7,20 +7,20 @@ function Login() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     setMessage("");
     setError("");
+    setSubmitting(true);
 
     try {
       const data = await loginUser({
         email,
         password,
       });
-
-      console.log("Login response:", data);
 
       localStorage.setItem("token", data.token);
 
@@ -29,20 +29,25 @@ function Login() {
       console.error("Login error:", error);
 
       setError(error.response?.data?.message || "Login failed");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <h1>LexiBridge</h1>
-      <h2>Login</h2>
+    <main className="auth-page">
+      <section className="auth-card">
+      <a className="shell-brand" href="/"><span className="shell-mark">L</span><span><b>LexiBridge</b><small>LEGAL TRANSLATION</small></span></a>
+      <p className="eyebrow">SECURE LEGAL WORKSPACE</p>
+      <h1>Welcome back</h1>
+      <p className="auth-intro">Sign in to continue to your document translations.</p>
 
       <form onSubmit={handleSubmit}>
         <div>
-          <label>Email</label>
+          <label htmlFor="login-email">Email</label>
 
           <input
-            type="email"
+            id="login-email" type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Enter your email"
@@ -51,10 +56,10 @@ function Login() {
         </div>
 
         <div>
-          <label>Password</label>
+          <label htmlFor="login-password">Password</label>
 
           <input
-            type="password"
+            id="login-password" type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Enter your password"
@@ -62,17 +67,18 @@ function Login() {
           />
         </div>
 
-        <button type="submit">Login</button>
+        <button type="submit" disabled={submitting}>{submitting ? "Signing in…" : "Sign in"}</button>
       </form>
 
       {message && <p>{message}</p>}
 
-      {error && <p>{error}</p>}
+      {error && <p className="auth-error" role="alert">{error}</p>}
 
       <p>
         Don't have an account? <a href="/register">Register</a>
       </p>
-    </div>
+      </section>
+    </main>
   );
 }
 

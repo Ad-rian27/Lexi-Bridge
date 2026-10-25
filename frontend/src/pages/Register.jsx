@@ -8,41 +8,46 @@ function Register() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
     setMessage("");
     setError("");
+    setSubmitting(true);
 
     try {
-      const data = await registerUser({
+      await registerUser({
         name,
         email,
         password,
       });
-
-      console.log("Register response:", data);
 
       setMessage("Registration successful!");
     } catch (error) {
       console.error("Registration error:", error);
 
       setError(error.response?.data?.message || "Registration failed");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <div>
-      <h1>LexiBridge</h1>
-      <h2>Create Account</h2>
+    <main className="auth-page">
+      <section className="auth-card">
+      <a className="shell-brand" href="/"><span className="shell-mark">L</span><span><b>LexiBridge</b><small>LEGAL TRANSLATION</small></span></a>
+      <p className="eyebrow">SECURE LEGAL WORKSPACE</p>
+      <h1>Create your account</h1>
+      <p className="auth-intro">Set up a workspace for your legal translations.</p>
 
       <form onSubmit={handleSubmit}>
         <div>
-          <label>Name</label>
+          <label htmlFor="register-name">Name</label>
 
           <input
-            type="text"
+            id="register-name" type="text"
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Enter your name"
@@ -51,10 +56,10 @@ function Register() {
         </div>
 
         <div>
-          <label>Email</label>
+          <label htmlFor="register-email">Email</label>
 
           <input
-            type="email"
+            id="register-email" type="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Enter your email"
@@ -63,10 +68,10 @@ function Register() {
         </div>
 
         <div>
-          <label>Password</label>
+          <label htmlFor="register-password">Password</label>
 
           <input
-            type="password"
+            id="register-password" type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Enter your password"
@@ -74,17 +79,18 @@ function Register() {
           />
         </div>
 
-        <button type="submit">Register</button>
+        <button type="submit" disabled={submitting}>{submitting ? "Creating account…" : "Create account"}</button>
       </form>
 
-      {message && <p>{message}</p>}
+      {message && <p className="auth-success" role="status">{message}</p>}
 
-      {error && <p>{error}</p>}
+      {error && <p className="auth-error" role="alert">{error}</p>}
 
       <p>
         Already have an account? <a href="/">Login</a>
       </p>
-    </div>
+      </section>
+    </main>
   );
 }
 
